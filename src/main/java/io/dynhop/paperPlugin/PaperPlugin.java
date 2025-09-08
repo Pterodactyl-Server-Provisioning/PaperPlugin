@@ -41,12 +41,14 @@ public final class PaperPlugin extends JavaPlugin {
         boolean isFallback = parseBoolean(SERVER_TYPE_FALLBACK, false);
         String baseUrl = "http://" + PROXY_IP + ":" + PROXY_PORT;
         String path = isFallback ? "/api/register-fallback" : "/api/register";
-        String url = baseUrl + path;
+        // Send parameters as query string rather than POST body
         String postBody = "name=" + enc(SERVER_NAME) + "&host=" + enc(SERVER_IP) + "&port=" + enc(SERVER_PORT);
+        String url = baseUrl + path + "?" + postBody;
 
         // Run registration async to avoid blocking the server thread
         Bukkit.getScheduler().runTaskAsynchronously(this, () -> {
-            boolean ok = httpPostWithRetry(url, postBody, PROXY_KEY, 2, Duration.ofSeconds(5));
+            // Send parameters via query string; no POST body
+            boolean ok = httpPostWithRetry(url, null, PROXY_KEY, 2, Duration.ofSeconds(5));
             if (ok) {
                 getLogger().info(prefix + "Registered server '" + SERVER_NAME + "' with proxy (fallback=" + isFallback + ").");
             } else {
@@ -60,10 +62,11 @@ public final class PaperPlugin extends JavaPlugin {
         // Attempt to unregister on shutdown
         if (!envValid) return;
         String baseUrl = "http://" + PROXY_IP + ":" + PROXY_PORT;
-        String url = baseUrl + "/api/unregister";
         String postBody = "name=" + enc(Objects.toString(SERVER_NAME, ""));
+        String url = baseUrl + "/api/unregister?" + postBody;
         Bukkit.getScheduler().runTaskAsynchronously(this, () -> {
-            boolean ok = httpPostWithRetry(url, postBody, PROXY_KEY, 1, Duration.ofSeconds(3));
+            // Send parameters via query string; no POST body
+            boolean ok = httpPostWithRetry(url, null, PROXY_KEY, 1, Duration.ofSeconds(3));
             if (ok) {
                 getLogger().info(prefix + "Unregistered server '" + SERVER_NAME + "' from proxy.");
             } else {

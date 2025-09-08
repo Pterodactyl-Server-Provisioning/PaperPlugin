@@ -17,6 +17,7 @@
     </properties>
 
     <build>
+        <finalName>paperplugin</finalName>
         <defaultGoal>clean package</defaultGoal>
         <plugins>
             <plugin>

@@ -1,8 +1,8 @@
-name: PaperPlugin
+name: ServerManger
 version: '1.0'
 main: io.dynhop.paperPlugin.PaperPlugin
 api-version: '1.21'
 load: STARTUP
 authors: [ Zero MØtion ]
-description: Paper Plugin, for the PSP Project, Register this Server with the Proxy
+description: Server Manager Plugin, registers this server with the proxy
 website: dynhop.io
