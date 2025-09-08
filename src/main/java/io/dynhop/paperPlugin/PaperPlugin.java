@@ -59,20 +59,21 @@ public final class PaperPlugin extends JavaPlugin {
 
     @Override
     public void onDisable() {
-        // Attempt to unregister on shutdown
+        // Attempt to unregister on shutdown without scheduling new tasks (plugin is disabling)
         if (!envValid) return;
         String baseUrl = "http://" + PROXY_IP + ":" + PROXY_PORT;
         String postBody = "name=" + enc(Objects.toString(SERVER_NAME, ""));
         String url = baseUrl + "/api/unregister?" + postBody;
-        Bukkit.getScheduler().runTaskAsynchronously(this, () -> {
-            // Send parameters via query string; no POST body
+        try {
             boolean ok = httpPostWithRetry(url, null, PROXY_KEY, 1, Duration.ofSeconds(3));
             if (ok) {
                 getLogger().info(prefix + "Unregistered server '" + SERVER_NAME + "' from proxy.");
             } else {
                 getLogger().log(Level.WARNING, prefix + "Failed to unregister server from proxy.");
             }
-        });
+        } catch (Exception e) {
+            getLogger().log(Level.WARNING, prefix + "Exception during unregister: " + e.getMessage());
+        }
     }
 
     private boolean validateEnv() {
