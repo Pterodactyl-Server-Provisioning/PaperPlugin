@@ -41,14 +41,12 @@ public final class PaperPlugin extends JavaPlugin {
         boolean isFallback = parseBoolean(SERVER_TYPE_FALLBACK, false);
         String baseUrl = "http://" + PROXY_IP + ":" + PROXY_PORT;
         String path = isFallback ? "/api/register-fallback" : "/api/register";
-        String url = baseUrl + path
-                + "?name=" + enc(SERVER_NAME)
-                + "&host=" + enc(SERVER_IP)
-                + "&port=" + enc(SERVER_PORT);
+        String url = baseUrl + path;
+        String postBody = "name=" + enc(SERVER_NAME) + "&host=" + enc(SERVER_IP) + "&port=" + enc(SERVER_PORT);
 
         // Run registration async to avoid blocking the server thread
         Bukkit.getScheduler().runTaskAsynchronously(this, () -> {
-            boolean ok = httpGetWithRetry(url, PROXY_KEY, 2, Duration.ofSeconds(5));
+            boolean ok = httpPostWithRetry(url, postBody, PROXY_KEY, 2, Duration.ofSeconds(5));
             if (ok) {
                 getLogger().info(prefix + "Registered server '" + SERVER_NAME + "' with proxy (fallback=" + isFallback + ").");
             } else {
@@ -62,9 +60,10 @@ public final class PaperPlugin extends JavaPlugin {
         // Attempt to unregister on shutdown
         if (!envValid) return;
         String baseUrl = "http://" + PROXY_IP + ":" + PROXY_PORT;
-        String url = baseUrl + "/api/unregister?name=" + enc(Objects.toString(SERVER_NAME, ""));
+        String url = baseUrl + "/api/unregister";
+        String postBody = "name=" + enc(Objects.toString(SERVER_NAME, ""));
         Bukkit.getScheduler().runTaskAsynchronously(this, () -> {
-            boolean ok = httpGetWithRetry(url, PROXY_KEY, 1, Duration.ofSeconds(3));
+            boolean ok = httpPostWithRetry(url, postBody, PROXY_KEY, 1, Duration.ofSeconds(3));
             if (ok) {
                 getLogger().info(prefix + "Unregistered server '" + SERVER_NAME + "' from proxy.");
             } else {
@@ -115,11 +114,11 @@ public final class PaperPlugin extends JavaPlugin {
         return URLEncoder.encode(v == null ? "" : v, StandardCharsets.UTF_8);
     }
 
-    private boolean httpGetWithRetry(String url, String proxyKey, int retries, Duration timeout) {
+    private boolean httpPostWithRetry(String url, String body, String proxyKey, int retries, Duration timeout) {
         int attempts = Math.max(1, retries);
         for (int i = 1; i <= attempts; i++) {
             try {
-                if (httpGet(url, proxyKey, timeout)) return true;
+                if (httpPost(url, body, proxyKey, timeout)) return true;
             } catch (Exception e) {
                 getLogger().log(Level.WARNING, prefix + "HTTP attempt " + i + " failed: " + e.getMessage());
             }
@@ -128,18 +127,29 @@ public final class PaperPlugin extends JavaPlugin {
         return false;
     }
 
-    private boolean httpGet(String urlStr, String proxyKey, Duration timeout) throws IOException {
+    private boolean httpPost(String urlStr, String body, String proxyKey, Duration timeout) throws IOException {
         URL url = new URL(urlStr);
         HttpURLConnection conn = (HttpURLConnection) url.openConnection();
         conn.setRequestMethod("POST");
+        conn.setDoOutput(true);
         conn.setConnectTimeout((int) Math.min(Integer.MAX_VALUE, timeout.toMillis()));
         conn.setReadTimeout((int) Math.min(Integer.MAX_VALUE, timeout.toMillis()));
-        // If a proxy key is present, send it via header; servers can ignore it if not needed
-        if (proxyKey != null && !proxyKey.trim().isEmpty()) {
-            conn.setRequestProperty("X-Proxy-Key", proxyKey.trim());
+        conn.setRequestProperty("Content-Type", "application/x-www-form-urlencoded; charset=UTF-8");
+        // Use standard Bearer auth if a proxy key is present
+        if (proxyKey != null) {
+            String token = proxyKey.trim();
+            if (!token.isEmpty()) {
+                conn.setRequestProperty("Authorization", "Bearer " + token);
+            }
+        }
+        byte[] out = body == null ? new byte[0] : body.getBytes(StandardCharsets.UTF_8);
+        if (out.length > 0) {
+            conn.getOutputStream().write(out);
+            conn.getOutputStream().flush();
+            conn.getOutputStream().close();
         }
         int code = conn.getResponseCode();
-        String body;
+        String respBody;
         try (BufferedReader reader = new BufferedReader(new InputStreamReader(
                 code >= 200 && code < 400 ? conn.getInputStream() : conn.getErrorStream(), StandardCharsets.UTF_8))) {
             StringBuilder sb = new StringBuilder();
@@ -147,13 +157,13 @@ public final class PaperPlugin extends JavaPlugin {
             while (reader != null && (line = reader.readLine()) != null) {
                 sb.append(line);
             }
-            body = sb.toString();
+            respBody = sb.toString();
         }
         if (code >= 200 && code < 300) {
-            getLogger().fine(prefix + "HTTP OK " + code + ": " + body);
+            getLogger().fine(prefix + "HTTP OK " + code + ": " + respBody);
             return true;
         } else {
-            getLogger().warning(prefix + "HTTP " + code + ": " + body);
+            getLogger().warning(prefix + "HTTP " + code + ": " + respBody);
             return false;
         }
     }
